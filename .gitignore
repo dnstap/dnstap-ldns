@@ -16,3 +16,4 @@
 Makefile
 Makefile.in
 TAGS
+/dnstap-ldns

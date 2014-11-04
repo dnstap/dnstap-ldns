@@ -22,4 +22,14 @@ CLEANFILES += ${PROTOBUF_SOURCES}
 
 bin_PROGRAMS += dnstap-ldns
 dnstap_ldns_SOURCES = \
-	dnstap-ldns.c
+	dnstap-ldns.c \
+	host2str.c \
+	${PROTOBUF_SOURCES}
+dnstap_ldns_CFLAGS = \
+	${libldns_CFLAGS} \
+	${libfstrm_CFLAGS} \
+	${libprotobuf_c_CFLAGS}
+dnstap_ldns_LDADD = \
+	${libldns_LIBS} \
+	${libfstrm_LIBS} \
+	${libprotobuf_c_LIBS}
