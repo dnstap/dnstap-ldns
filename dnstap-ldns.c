@@ -620,7 +620,7 @@ main(int argc, char **argv)
 	int rv = EXIT_FAILURE;
 	const char *input_fname = NULL;
 	struct fstrm_reader *r = NULL;
-	dnstap_output_format fmt = dnstap_output_format_yaml;
+	dnstap_output_format fmt = dnstap_output_format_quiet;
 	fstrm_res res;
 
 	/* Args. */
