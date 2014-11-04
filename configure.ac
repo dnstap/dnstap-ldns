@@ -26,6 +26,16 @@ AC_SUBST([my_CFLAGS])
 AC_CONFIG_HEADERS(config.h)
 AC_CONFIG_FILES([Makefile])
 
+PKG_CHECK_MODULES([libldns], [libldns])
+
+PKG_CHECK_MODULES([libfstrm], [libfstrm >= 0.2.0])
+
+PKG_CHECK_MODULES([libprotobuf_c], [libprotobuf-c >= 1.0.1])
+
+AC_PATH_PROG([PROTOC_C], [protoc-c])
+AS_IF([test -z "$PROTOC_C"],
+  AC_MSG_ERROR([The protoc-c program was not found. Please install the protobuf-c compiler!]))
+
 AC_OUTPUT
 AC_MSG_RESULT([
     $PACKAGE $VERSION
