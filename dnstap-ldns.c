@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 by Farsight Security, Inc.
+ * Copyright (c) 2014-2015 by Farsight Security, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 #include <arpa/inet.h>
+#include <assert.h>
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -34,6 +35,11 @@ ldns_status my_ldns_pktheader2buffer_str(ldns_buffer *, const ldns_pkt *);
 ldns_status my_ldns_pkt2buffer_str_fmt(ldns_buffer *, const ldns_output_format *, const ldns_pkt *);
 
 static const char g_dnstap_content_type[] = "protobuf:dnstap.Dnstap";
+
+typedef enum {
+	dnstap_input_format_frame_stream = 0,
+	dnstap_input_format_hex = 1,
+} dnstap_input_format;
 
 typedef enum {
 	dnstap_output_format_yaml = 0,
@@ -594,6 +600,7 @@ usage(void)
 	fprintf(stderr, "Usage: dnstap-ldns [OPTION]...\n");
 	fprintf(stderr, "  -q        Use quiet text output format\n");
 	fprintf(stderr, "  -y        Use verbose YAML output format\n");
+	fprintf(stderr, "  -x        Input format is hexlified protobuf or NULL RR\n");
 	fprintf(stderr, "  -r <FILE> Read dnstap payloads from file\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Quiet text output format mnemonics:\n");
@@ -613,36 +620,13 @@ usage(void)
 	exit(EXIT_FAILURE);
 }
 
-int
-main(int argc, char **argv)
+static int
+read_input_frame_stream(const char *input_fname,
+			const dnstap_output_format fmt)
 {
-	int c;
-	int rv = EXIT_FAILURE;
-	const char *input_fname = NULL;
 	struct fstrm_reader *r = NULL;
-	dnstap_output_format fmt = dnstap_output_format_quiet;
+	int rv = EXIT_FAILURE;
 	fstrm_res res;
-
-	/* Args. */
-	while ((c = getopt(argc, argv, "qyr:")) != -1) {
-		switch (c) {
-		case 'q':
-			fmt = dnstap_output_format_quiet;
-			break;
-		case 'y':
-			fmt = dnstap_output_format_yaml;
-			break;
-		case 'r':
-			input_fname = optarg;
-			break;
-		default:
-			usage();
-		}
-	}
-	argc -= optind;
-	argv += optind;
-	if (argc != 0)
-		usage();
 
 	if (input_fname) {
 		/* Setup file reader options. */
@@ -703,6 +687,165 @@ main(int argc, char **argv)
 out:
 	/* Cleanup. */
 	fstrm_reader_destroy(&r);
+
+	return rv;
+}
+
+static int
+read_input_hex(const char *input_fname,
+	       const dnstap_output_format fmt)
+{
+	int rv = EXIT_FAILURE;
+	FILE *r = NULL;
+
+	/* Allocate buffer for input data. */
+	static const size_t alloc_bytes = 262144;
+	uint8_t *data = calloc(1, alloc_bytes);
+	assert(data != NULL);
+
+	/* Open the input file stream. */
+	if (!input_fname || strcmp(input_fname, "-") == 0) {
+		r = stdin;
+	} else {
+		r = fopen(input_fname, "r");
+		if (!r) {
+			fputs("Error: fopen() failed.\n", stderr);
+			goto out;
+		}
+	}
+
+	/* Read up to 'alloc_bytes' from input stream. */
+	const size_t len_data = fread(data, 1, alloc_bytes, r);
+	if (ferror(r)) {
+		fputs("Error: fread() failed.\n", stderr);
+		goto out;
+	}
+	if (!feof(r)) {
+		fputs("Error: Too much data from input.\n", stderr);
+		goto out;
+	}
+
+	/* If present, trim \# and data length, for RFC 3597 rdata. */
+	char *p = data;
+	if (len_data >= 4 &&
+	    p[0] == '\\' &&
+	    p[1] == '#' &&
+	    p[2] == ' ')
+	{
+		/* Trim the "\# ". */
+		p += 3;
+
+		/* Trim the rdata length. */
+		p = strchr(p, ' ');
+		if (!p)
+			goto out;
+	}
+
+	/* Unhexlify the data. */
+	ldns_rdf *rdf = NULL;
+	ldns_rr *rr = NULL;
+	ldns_status status = ldns_str2rdf_hex(&rdf, p);
+	if (status != LDNS_STATUS_OK) {
+		/**
+		 * Failed to parse as hex or 3597 rdata, try to parse as a
+		 * master format NULL RR, possibly in multi-line format with
+		 * comments (e.g., dig output).
+		 */
+		char *line = NULL;
+		char *saveptr = NULL;
+
+		line = strtok_r(data, "\n\r", &saveptr);
+		if (!line)
+			goto out;
+
+		do {
+			status = ldns_rr_new_frm_str(&rr, line, 0, NULL, NULL);
+			if (status == LDNS_STATUS_OK)
+				break;
+			line = strtok_r(NULL, "\n\r", &saveptr);
+		} while (line);
+
+		if (ldns_rr_get_type(rr) != LDNS_RR_TYPE_NULL) {
+			fprintf(stderr, "Error: Unexpected rrtype (%u).\n",
+				ldns_rr_get_type(rr));
+			goto out;
+		}
+
+		if (ldns_rr_rd_count(rr) != 1) {
+			fprintf(stderr, "Error: Unexpected rdf count (%u).\n",
+				ldns_rr_rd_count(rr));
+			goto out;
+		}
+
+		rdf = ldns_rr_pop_rdf(rr);
+	}
+
+	/* Get the raw data pointer out of the wrapped ldns type. */
+	uint8_t *raw = ldns_rdf_data(rdf);
+	size_t len_raw = ldns_rdf_size(rdf);
+
+	/* Decode and print the protobuf message. */
+	if (!print_dnstap_frame(raw, len_raw, fmt, stdout)) {
+		fputs("Error: print_dnstap_frame() failed.\n", stderr);
+		goto out;
+	}
+
+	/* Success. */
+	rv = EXIT_SUCCESS;
+
+out:
+	/* Cleanup. */
+	if (r)
+		fclose(r);
+	if (rdf)
+		ldns_rdf_deep_free(rdf);
+	if (rr)
+		ldns_rr_free(rr);
+	free(data);
+
+	return rv;
+}
+
+int
+main(int argc, char **argv)
+{
+	int c;
+	int rv = EXIT_FAILURE;
+	const char *input_fname = NULL;
+	dnstap_input_format in_fmt = dnstap_input_format_frame_stream;
+	dnstap_output_format out_fmt = dnstap_output_format_quiet;
+
+	/* Args. */
+	while ((c = getopt(argc, argv, "qyxr:")) != -1) {
+		switch (c) {
+		case 'q':
+			out_fmt = dnstap_output_format_quiet;
+			break;
+		case 'y':
+			out_fmt = dnstap_output_format_yaml;
+			break;
+		case 'x':
+			in_fmt = dnstap_input_format_hex;
+			break;
+		case 'r':
+			input_fname = optarg;
+			break;
+		default:
+			usage();
+		}
+	}
+	argc -= optind;
+	argv += optind;
+	if (argc != 0)
+		usage();
+
+	if (in_fmt == dnstap_input_format_frame_stream) {
+		rv = read_input_frame_stream(input_fname, out_fmt);
+	} else if (in_fmt == dnstap_input_format_hex) {
+		rv = read_input_hex(input_fname, out_fmt);
+	} else {
+		rv = EXIT_FAILURE;
+	}
 
 	return rv;
 }
