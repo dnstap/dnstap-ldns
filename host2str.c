@@ -176,6 +176,7 @@ my_ldns_pkt2buffer_str_fmt(ldns_buffer *output,
 					   ldns_pkt_edns_udp_size(pkt));
 
 			if (ldns_pkt_edns_data(pkt)) {
+				ldns_buffer_printf(output, "    ");
 				ldns_buffer_printf(output, ";; Data: ");
 				(void)ldns_rdf2buffer_str(output,
 							  ldns_pkt_edns_data(pkt));
