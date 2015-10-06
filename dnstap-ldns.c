@@ -765,6 +765,11 @@ read_input_hex(const char *input_fname,
 			line = strtok_r(NULL, "\n\r", &saveptr);
 		} while (line);
 
+		if (!rr) {
+			fprintf(stderr, "Error: Unable to decode as hex or RR. Bad input?\n");
+			goto out;
+		}
+
 		if (ldns_rr_get_type(rr) != LDNS_RR_TYPE_NULL) {
 			fprintf(stderr, "Error: Unexpected rrtype (%u).\n",
 				ldns_rr_get_type(rr));
