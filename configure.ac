@@ -1,7 +1,7 @@
 AC_PREREQ(2.64)
 
 AC_INIT([dnstap-ldns],
-        [0.1.0],
+        [0.2.0],
         [https://github.com/dnstap/dnstap-ldns/issues],
         [dnstap-ldns],
         [https://github.com/dnstap/dnstap-ldns])
