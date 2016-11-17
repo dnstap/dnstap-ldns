@@ -777,7 +777,7 @@ read_input_hex(const char *input_fname,
 		}
 
 		if (ldns_rr_rd_count(rr) != 1) {
-			fprintf(stderr, "Error: Unexpected rdf count (%u).\n",
+			fprintf(stderr, "Error: Unexpected rdf count (%zu).\n",
 				ldns_rr_rd_count(rr));
 			goto out;
 		}
