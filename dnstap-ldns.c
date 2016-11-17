@@ -697,6 +697,8 @@ read_input_hex(const char *input_fname,
 {
 	int rv = EXIT_FAILURE;
 	FILE *r = NULL;
+	ldns_rdf *rdf = NULL;
+	ldns_rr *rr = NULL;
 
 	/* Allocate buffer for input data. */
 	static const size_t alloc_bytes = 262144;
@@ -742,8 +744,6 @@ read_input_hex(const char *input_fname,
 	}
 
 	/* Unhexlify the data. */
-	ldns_rdf *rdf = NULL;
-	ldns_rr *rr = NULL;
 	ldns_status status = ldns_str2rdf_hex(&rdf, p);
 	if (status != LDNS_STATUS_OK) {
 		/**
