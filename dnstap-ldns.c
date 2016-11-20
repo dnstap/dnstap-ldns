@@ -513,7 +513,7 @@ print_dnstap_frame_yaml(const Dnstap__Dnstap *d, FILE *fp)
 	}
 
 	/* Print 'message' field. */
-	if (d->type == DNSTAP__DNSTAP__TYPE__MESSAGE) {
+	if (d->type == DNSTAP__DNSTAP__TYPE__MESSAGE && d->message != NULL) {
 		fputs("message:\n", fp);
 		if (!print_dnstap_message_yaml(d->message, fp))
 			return false;
