@@ -164,6 +164,7 @@ print_domain_name(const ProtobufCBinaryData *domain, FILE *fp)
 {
 	/* Wrap the binary data in 'domain' into an 'ldns_rdf'. */
 	ldns_rdf *dname;
+	assert(domain->data != NULL);
 	dname = ldns_dname_new(domain->len, domain->data);
 	if (!dname)
 		return false;
@@ -448,7 +449,7 @@ print_dnstap_message_yaml(const Dnstap__Message *m, FILE *fp)
 		fprintf(fp, "  response_port: %u\n", m->response_port);
 
 	/* Print 'query_zone' field. */
-	if (m->has_query_zone) {
+	if (m->has_query_zone && m->query_zone.data != NULL) {
 		fputs("  query_zone: ", fp);
 		print_domain_name(&m->query_zone, fp);
 		fputc('\n', fp);
