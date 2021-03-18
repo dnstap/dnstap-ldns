@@ -66,6 +66,31 @@ print_string(const void *data, size_t len, FILE *out)
 	fputc('"', out);
 }
 
+static void
+print_json_string(const void *data, size_t len, FILE *out)
+{
+	uint8_t *str = (uint8_t *)data;
+	fputc('"', out);
+	while (len-- != 0)
+	{
+		unsigned c = *(str++);
+		if (isprint(c))
+		{
+			if (c == '"')
+				fputs("\\\"", out);
+			else if (c == '\\')
+				fputs("\\\\", out);
+			else
+				fputc(c, out);
+		}
+		else
+		{
+			fprintf(out, "\\u%04x", c);
+		}
+	}
+	fputc('"', out);
+}
+
 static bool
 print_dns_question(const ProtobufCBinaryData *message, FILE *fp)
 {
@@ -201,7 +226,7 @@ print_dns_message_json(const ProtobufCBinaryData *message, FILE *fp)
 		str = ldns_rdf2str(qname);
 		if (str) {
 			fputs(",\"qname\":", fp);
-			print_string(str, strlen(str), fp);
+			print_json_string(str, strlen(str), fp);
 			free(str);
 		}
 
@@ -209,7 +234,7 @@ print_dns_message_json(const ProtobufCBinaryData *message, FILE *fp)
 		str = ldns_rr_class2str(qclass);
 		if (str) {
 			fputs(",\"qclass\":", fp);
-			print_string(str, strlen(str), fp);
+			print_json_string(str, strlen(str), fp);
 			free(str);
 		}
 
@@ -217,7 +242,7 @@ print_dns_message_json(const ProtobufCBinaryData *message, FILE *fp)
 		str = ldns_rr_type2str(qtype);
 		if (str) {
 			fputs(",\"qtype\":", fp);
-			print_string(str, strlen(str), fp);
+			print_json_string(str, strlen(str), fp);
 			free(str);
 		}
 	}
@@ -250,7 +275,7 @@ print_dns_message_json(const ProtobufCBinaryData *message, FILE *fp)
 		str = ldns_pkt_rcode2str(ldns_pkt_get_rcode(pkt));
 		if (str) {
 			fputs(",\"rcode\":", fp);
-			print_string(str, strlen(str), fp);
+			print_json_string(str, strlen(str), fp);
 			free(str);
 		}
 
@@ -258,7 +283,7 @@ print_dns_message_json(const ProtobufCBinaryData *message, FILE *fp)
 		fprintf(fp, ",\"ancount\":%u", ldns_pkt_ancount(pkt));
 		fprintf(fp, ",\"nscount\":%u", ldns_pkt_nscount(pkt));
 		fprintf(fp, ",\"arcount\":%u", ldns_pkt_arcount(pkt));
-		fprintf(fp, ",\"query_time\":%u", ldns_pkt_querytime(pkt));
+		fprintf(fp, ",\"querytime\":%u", ldns_pkt_querytime(pkt));
 		fprintf(fp, ",\"edns_udp_size\":%u", ldns_pkt_edns_udp_size(pkt));
 		fprintf(fp, ",\"edns_extended_rcode\":%u", ldns_pkt_edns_extended_rcode(pkt));
 		}
@@ -616,7 +641,7 @@ print_dnstap_message_json(const Dnstap__Message *m, FILE *fp)
 	if (!m_type)
 		return false;
 	fputs(",\"type\":", fp);
-	print_string(m_type->name, strlen(m_type->name), fp);
+	print_json_string(m_type->name, strlen(m_type->name), fp);
 
 
 	/* Print 'query_time' field. */
@@ -642,7 +667,7 @@ print_dnstap_message_json(const Dnstap__Message *m, FILE *fp)
 		if (!type)
 			return false;
 		fputs(",\"socket_family\":", fp);
-		print_string(type->name, strlen(type->name), fp);
+		print_json_string(type->name, strlen(type->name), fp);
 	}
 
 	/* Print 'socket_protocol' field. */
@@ -654,7 +679,7 @@ print_dnstap_message_json(const Dnstap__Message *m, FILE *fp)
 		if (!type)
 			return false;
 		fputs(",\"socket_protocol\":", fp);
-		print_string(type->name, strlen(type->name), fp);
+		print_json_string(type->name, strlen(type->name), fp);
 	}
 
 	/* Print 'query_address' field. */
