@@ -16,7 +16,7 @@ If building from a git checkout, the `autotools` must be installed. Run the `./a
 
 `dnstap` encoded files can be decoded and printed to `stdout` by running `dnstap-ldns -r` on the `dnstap` file.
 
-The output format can be selected by passing additional command-line flags. The `-q` flag specifies the "quiet text" output format, which is compact (one line per `dnstap` frame), and excludes full DNS message details. The `-y` flag specifies a more verbose multi-document YAML-encoded output format that includes full DNS message details, as parsed by the [ldns] library. The `-j` flag specifies a more verbose JSON-encoded output format that includes almost of DNS message details, as parsed by the [ldns] library.
+The output format can be selected by passing additional command-line flags. The `-q` flag specifies the "quiet text" output format, which is compact (one line per `dnstap` frame), and excludes full DNS message details. The `-y` flag specifies a more verbose multi-document YAML-encoded output format that includes full DNS message details, as parsed by the [ldns] library.
 
 `dnstap-ldns` can also read bare hex-encoded dnstap protobufs without Frame Stream encoding. The `-x` flag will automatically detect whether the input data is a string of hex characters (possibly with embedded whitespace), or is in the generic record data format defined by [RFC 3597].
 
