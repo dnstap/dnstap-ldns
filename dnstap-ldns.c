@@ -44,7 +44,6 @@ typedef enum {
 typedef enum {
 	dnstap_output_format_yaml = 0,
 	dnstap_output_format_quiet = 1,
-	dnstap_output_format_json = 2,
 } dnstap_output_format;
 
 static void
@@ -61,31 +60,6 @@ print_string(const void *data, size_t len, FILE *out)
 				fputc(c, out);
 		} else {
 			fprintf(out, "\\x%02x", c);
-		}
-	}
-	fputc('"', out);
-}
-
-static void
-print_json_string(const void *data, size_t len, FILE *out)
-{
-	uint8_t *str = (uint8_t *)data;
-	fputc('"', out);
-	while (len-- != 0)
-	{
-		unsigned c = *(str++);
-		if (isprint(c))
-		{
-			if (c == '"')
-				fputs("\\\"", out);
-			else if (c == '\\')
-				fputs("\\\\", out);
-			else
-				fputc(c, out);
-		}
-		else
-		{
-			fprintf(out, "\\u%04x", c);
 		}
 	}
 	fputc('"', out);
@@ -185,117 +159,6 @@ print_dns_message(const ProtobufCBinaryData *message, const char *field_name, FI
 	return true;
 }
 
-static void
-print_bool(const bool b, FILE *fp)
-{
-	if (b) {
-		fputs("true", fp);
-	} else {
-		fputs("false", fp);
-	}
-}
-
-static bool
-print_dns_message_json(const ProtobufCBinaryData *message, FILE *fp)
-{
-	char *str = NULL;
-	ldns_pkt *pkt = NULL;
-	ldns_rr *rr = NULL;
-	ldns_rdf *qname = NULL;
-	ldns_rr_class qclass = 0;
-	ldns_rr_type qtype = 0;
-	ldns_status status;
-
-	/* Parse the raw wire message. */
-	status = ldns_wire2pkt(&pkt, message->data, message->len);
-	if (status == LDNS_STATUS_OK) {
-		/* Get the question RR. */
-		rr = ldns_rr_list_rr(ldns_pkt_question(pkt), 0);
-
-		/* Get the question name, class, and type. */
-		if (rr)
-		{
-			qname = ldns_rr_owner(rr);
-			qclass = ldns_rr_get_class(rr);
-			qtype = ldns_rr_get_type(rr);
-		}
-	}
-
-	if (status == LDNS_STATUS_OK && rr && qname) {
-		/* Print the question name. */
-		str = ldns_rdf2str(qname);
-		if (str) {
-			fputs(",\"qname\":", fp);
-			print_json_string(str, strlen(str), fp);
-			free(str);
-		}
-
-		/* Print the question class. */
-		str = ldns_rr_class2str(qclass);
-		if (str) {
-			fputs(",\"qclass\":", fp);
-			print_json_string(str, strlen(str), fp);
-			free(str);
-		}
-
-		/* Print the question type. */
-		str = ldns_rr_type2str(qtype);
-		if (str) {
-			fputs(",\"qtype\":", fp);
-			print_json_string(str, strlen(str), fp);
-			free(str);
-		}
-	}
-
-	if (status == LDNS_STATUS_OK) {
-		fputs(",\"qr\":", fp);
-		print_bool(ldns_pkt_qr(pkt), fp);
-
-		fputs(",\"aa\":", fp);
-		print_bool(ldns_pkt_aa(pkt), fp);
-
-		fputs(",\"tc\":", fp);
-		print_bool(ldns_pkt_tc(pkt), fp);
-
-		fputs(",\"rd\":", fp);
-		print_bool(ldns_pkt_rd(pkt), fp);
-
-		fputs(",\"cd\":", fp);
-		print_bool(ldns_pkt_cd(pkt), fp);
-
-		fputs(",\"ra\":", fp);
-		print_bool(ldns_pkt_ra(pkt), fp);
-
-		fputs(",\"ad\":", fp);
-		print_bool(ldns_pkt_ad(pkt), fp);
-
-		fputs(",\"do\":", fp);
-		print_bool(ldns_pkt_edns_do(pkt), fp);
-
-		str = ldns_pkt_rcode2str(ldns_pkt_get_rcode(pkt));
-		if (str) {
-			fputs(",\"rcode\":", fp);
-			print_json_string(str, strlen(str), fp);
-			free(str);
-		}
-
-		fprintf(fp, ",\"qdcount\":%u", ldns_pkt_qdcount(pkt));
-		fprintf(fp, ",\"ancount\":%u", ldns_pkt_ancount(pkt));
-		fprintf(fp, ",\"nscount\":%u", ldns_pkt_nscount(pkt));
-		fprintf(fp, ",\"arcount\":%u", ldns_pkt_arcount(pkt));
-		fprintf(fp, ",\"querytime\":%u", ldns_pkt_querytime(pkt));
-		fprintf(fp, ",\"edns_udp_size\":%u", ldns_pkt_edns_udp_size(pkt));
-		fprintf(fp, ",\"edns_extended_rcode\":%u", ldns_pkt_edns_extended_rcode(pkt));
-		}
-
-	/* Cleanup. */
-	if (pkt != NULL)
-		ldns_pkt_free(pkt);
-
-	/* Success. */
-	return true;
-}
-
 static bool
 print_domain_name(const ProtobufCBinaryData *domain, FILE *fp)
 {
@@ -342,8 +205,10 @@ print_ip_address(const ProtobufCBinaryData *ip, FILE *fp)
 }
 
 static bool
-_print_timestamp(uint64_t timestamp_sec, uint32_t timestamp_nsec, FILE *fp, const char *fmt)
+print_timestamp(uint64_t timestamp_sec, uint32_t timestamp_nsec, FILE *fp)
 {
+	static const char *fmt = "%F %H:%M:%S";
+
 	char buf[100] = {0};
 	struct tm tm;
 	time_t t = (time_t) timestamp_sec;
@@ -362,27 +227,6 @@ _print_timestamp(uint64_t timestamp_sec, uint32_t timestamp_nsec, FILE *fp, cons
 
 	/* Success. */
 	return true;
-}
-
-static bool
-print_timestamp(uint64_t timestamp_sec, uint32_t timestamp_nsec, FILE *fp)
-{
-	static const char *fmt = "%F %H:%M:%S";
-
-	return _print_timestamp(timestamp_sec, timestamp_nsec, fp, fmt);
-}
-
-static bool
-print_timestamp_iso(uint64_t timestamp_sec, uint32_t timestamp_nsec, FILE *fp)
-{
-	static const char *fmt = "%FT%H:%M:%S";
-	bool ret;
-
-	ret = _print_timestamp(timestamp_sec, timestamp_nsec, fp, fmt);
-	if (ret) {
-		fputc('Z', fp);
-	}
-	return ret;
 }
 
 static bool
@@ -629,107 +473,6 @@ print_dnstap_message_yaml(const Dnstap__Message *m, FILE *fp)
 }
 
 static bool
-print_dnstap_message_json(const Dnstap__Message *m, FILE *fp)
-{
-	bool is_query = false;
-
-	/* Print 'type' field. */
-	const ProtobufCEnumValue *m_type =
-		protobuf_c_enum_descriptor_get_value(
-			&dnstap__message__type__descriptor,
-			m->type);
-	if (!m_type)
-		return false;
-	fputs(",\"type\":", fp);
-	print_json_string(m_type->name, strlen(m_type->name), fp);
-
-
-	/* Print 'query_time' field. */
-	if (m->has_query_time_sec && m->has_query_time_nsec) {
-		fputs(",\"query_time\":\"", fp);
-		print_timestamp(m->query_time_sec, m->query_time_nsec, fp);
-		fputc('\"', fp);
-	}
-
-	/* Print 'response_time' field. */
-	if (m->has_response_time_sec && m->has_response_time_nsec) {
-		fputs(",\"response_time\":\"", fp);
-		print_timestamp(m->response_time_sec, m->response_time_nsec, fp);
-		fputc('\"', fp);
-	}
-
-	/* Print 'socket_family' field. */
-	if (m->has_socket_family) {
-		const ProtobufCEnumValue *type =
-			protobuf_c_enum_descriptor_get_value(
-				&dnstap__socket_family__descriptor,
-				m->socket_family);
-		if (!type)
-			return false;
-		fputs(",\"socket_family\":", fp);
-		print_json_string(type->name, strlen(type->name), fp);
-	}
-
-	/* Print 'socket_protocol' field. */
-	if (m->has_socket_protocol) {
-		const ProtobufCEnumValue *type =
-			protobuf_c_enum_descriptor_get_value(
-				&dnstap__socket_protocol__descriptor,
-				m->socket_protocol);
-		if (!type)
-			return false;
-		fputs(",\"socket_protocol\":", fp);
-		print_json_string(type->name, strlen(type->name), fp);
-	}
-
-	/* Print 'query_address' field. */
-	if (m->has_query_address) {
-		fputs(",\"query_address\":\"", fp);
-		print_ip_address(&m->query_address, fp);
-		fputc('\"', fp);
-	}
-
-	/* Print 'response_address field. */
-	if (m->has_response_address) {
-		fputs(",\"response_address\":\"", fp);
-		print_ip_address(&m->response_address, fp);
-		fputc('\"', fp);
-	}
-
-	/* Print 'query_port' field. */
-	if (m->has_query_port)
-		fprintf(fp, ",\"query_port\":%u", m->query_port);
-
-	/* Print 'response_port' field. */
-	if (m->has_response_port)
-		fprintf(fp, ",\"response_port\":%u", m->response_port);
-
-	/* Print 'query_zone' field. */
-	if (m->has_query_zone && m->query_zone.data != NULL) {
-		fputs(",\"query_zone\":", fp);
-		print_domain_name(&m->query_zone, fp);
-	}
-
-	/* Print 'query_message' field. */
-	if (m->has_query_message) {
-		fprintf(fp, ",\"message_len\":%zd", m->query_message.len);
-
-		if (!print_dns_message_json(&m->query_message, fp))
-			return false;
-	}
-
-	/* Print 'response_message' field .*/
-	if (m->has_response_message) {
-		fprintf(fp, ",\"message_len\":%zd", m->response_message.len);
-		if (!print_dns_message_json(&m->response_message, fp))
-			return false;
-	}
-
-	/* Success. */
-	return true;
-}
-
-static bool
 print_dnstap_frame_quiet(const Dnstap__Dnstap *d, FILE *fp)
 {
 	if (d->type == DNSTAP__DNSTAP__TYPE__MESSAGE && d->message != NULL) {
@@ -782,45 +525,6 @@ print_dnstap_frame_yaml(const Dnstap__Dnstap *d, FILE *fp)
 }
 
 static bool
-print_dnstap_frame_json(const Dnstap__Dnstap *d, FILE *fp)
-{
-	/* Print 'type' field. */
-	const ProtobufCEnumValue *d_type =
-		protobuf_c_enum_descriptor_get_value(
-			&dnstap__dnstap__type__descriptor,
-			d->type);
-	if (!d_type)
-		return false;
-
-	fputs("{", fp);
-
-	/* Print 'version' field. */
-	if (d->has_version) {
-		fputs("\"version\":", fp);
-		print_string(d->version.data, d->version.len, fp);
-	}
-
-	fputs(",\"@timestamp\":\"", fp);
-	if (d->message->has_query_message) {
-		print_timestamp_iso(d->message->query_time_sec, d->message->query_time_nsec, fp);
-	} else {
-		print_timestamp_iso(d->message->response_time_sec, d->message->response_time_nsec, fp);
-	}
-	fputc('"', fp);
-
-	/* Print 'message' field. */
-	if (d->type == DNSTAP__DNSTAP__TYPE__MESSAGE && d->message != NULL)	{
-		if (!print_dnstap_message_json(d->message, fp))
-			return false;
-	}
-
-	fputs("}\n", fp);
-
-	/* Success. */
-	return true;
-}
-
-static bool
 print_dnstap_frame(const uint8_t *data, size_t len_data, dnstap_output_format fmt, FILE *fp)
 {
 	bool rv = false;
@@ -840,9 +544,6 @@ print_dnstap_frame(const uint8_t *data, size_t len_data, dnstap_output_format fm
 			goto out;
 	} else if (fmt == dnstap_output_format_quiet) {
 		if (!print_dnstap_frame_quiet(d, fp))
-			goto out;
-	} else if (fmt == dnstap_output_format_json) {
-		if (!print_dnstap_frame_json(d, fp))
 			goto out;
 	} else {
 		fprintf(stderr, "%s: unknown output format %d\n", __func__, fmt);
@@ -1121,7 +822,7 @@ main(int argc, char **argv)
 	dnstap_output_format out_fmt = dnstap_output_format_quiet;
 
 	/* Args. */
-	while ((c = getopt(argc, argv, "qyjxr:")) != -1) {
+	while ((c = getopt(argc, argv, "qyxr:")) != -1) {
 		switch (c) {
 		case 'q':
 			out_fmt = dnstap_output_format_quiet;
@@ -1134,9 +835,6 @@ main(int argc, char **argv)
 			break;
 		case 'r':
 			input_fname = optarg;
-			break;
-		case 'j':
-			out_fmt = dnstap_output_format_json;
 			break;
 		default:
 			usage();
