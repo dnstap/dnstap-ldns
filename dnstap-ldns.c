@@ -180,7 +180,7 @@ print_domain_name(const ProtobufCBinaryData *domain, FILE *fp)
 }
 
 static bool
-print_ip_address(const ProtobufCBinaryData *ip, FILE *fp)
+print_ip_address(const ProtobufCBinaryData *ip, FILE *fp, const bool do_quote)
 {
 	char buf[INET6_ADDRSTRLEN] = {0};
 
@@ -198,7 +198,13 @@ print_ip_address(const ProtobufCBinaryData *ip, FILE *fp)
 	}
 
 	/* Print the presentation form of the IP address. */
-	fputs(buf, fp);
+	if (do_quote) {
+		fputc('"', fp);
+		fputs(buf, fp);
+		fputc('"', fp);
+	} else {
+		fputs(buf, fp);
+	}
 
 	/* Success. */
 	return true;
@@ -320,12 +326,12 @@ print_dnstap_message_quiet(const Dnstap__Message *m, FILE *fp)
 	}
 	if (print_query_address) {
 		if (m->has_query_address)
-			print_ip_address(&m->query_address, fp);
+			print_ip_address(&m->query_address, fp, false);
 		else
 			fputs("MISSING_ADDRESS", fp);
 	} else {
 		if (m->has_response_address)
-			print_ip_address(&m->response_address, fp);
+			print_ip_address(&m->response_address, fp, false);
 		else
 			fputs("MISSING_ADDRESS", fp);
 	}
@@ -429,14 +435,14 @@ print_dnstap_message_yaml(const Dnstap__Message *m, FILE *fp)
 	/* Print 'query_address' field. */
 	if (m->has_query_address) {
 		fputs("  query_address: ", fp);
-		print_ip_address(&m->query_address, fp);
+		print_ip_address(&m->query_address, fp, true);
 		fputc('\n', fp);
 	}
 
 	/* Print 'response_address field. */
 	if (m->has_response_address) {
 		fputs("  response_address: ", fp);
-		print_ip_address(&m->response_address, fp);
+		print_ip_address(&m->response_address, fp, true);
 		fputc('\n', fp);
 	}
 
